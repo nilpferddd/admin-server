@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Server - VNC-Zugriff</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar {
+            background-color: #212529;
+            color: #fff;
+            min-height: calc(100vh - 56px);
+        }
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 0.2rem;
+        }
+        .sidebar .nav-link:hover {
+            color: #fff;
+        }
+        .sidebar .nav-link.active {
+            color: #fff;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .sidebar .nav-link i {
+            margin-right: 0.5rem;
+        }
+        .main-content {
+            flex: 1;
+            padding: 1.5rem;
+        }
+        .vnc-container {
+            width: 100%;
+            height: 600px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .vnc-container.active {
+            background-color: #000;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/dashboard">Admin Server</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle"></i> <%= user.username %>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#changePasswordModal">Passwort ändern</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/logout">Abmelden</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 sidebar p-3">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard">
+                            <i class="bi bi-speedometer2"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/scripts">
+                            <i class="bi bi-code-square"></i> Python-Skripte
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/vnc">
+                            <i class="bi bi-display"></i> VNC-Zugriff
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/n8n">
+                            <i class="bi bi-diagram-3"></i> n8n Workflows
+                        </a>
+                    </li>
+                    <% if (user.role === 'admin') { %>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/users">
+                            <i class="bi bi-people"></i> Benutzerverwaltung
+                        </a>
+                    </li>
+                    <% } %>
+                </ul>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9 col-lg-10 main-content">
+                <h1 class="mb-4">VNC-Zugriff</h1>
+                
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">VNC-Server steuern</h5>
+                                <p class="card-text">Starten oder stoppen Sie den VNC-Server und stellen Sie eine Verbindung her.</p>
+                                
+                                <div class="d-flex gap-2 mb-3">
+                                    <button id="startVncBtn" class="btn btn-success">
+                                        <i class="bi bi-play-fill"></i> VNC-Server starten
+                                    </button>
+                                    <button id="stopVncBtn" class="btn btn-danger" disabled>
+                                        <i class="bi bi-stop-fill"></i> VNC-Server stoppen
+                                    </button>
+                                    <button id="setVncPasswordBtn" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#vncPasswordModal">
+                                        <i class="bi bi-key"></i> VNC-Passwort setzen
+                                    </button>
+                                </div>
+                                
+                                <div class="alert alert-info" id="vncStatus">
+                                    VNC-Server ist derzeit nicht aktiv. Klicken Sie auf "VNC-Server starten", um ihn zu starten.
+                                </div>
+                                
+                                <div id="vncConnectionInfo" class="d-none">
+                                    <h6>Verbindungsinformationen:</h6>
+                                    <div class="mb-2">
+                                        <strong>Adresse:</strong> <span id="vncAddress">localhost</span>
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>Port:</strong> <span id="vncPort">5901</span>
+                                    </div>
+                                    <div class="mb-3">
+                                        <strong>Passwort:</strong> <em>Ihr gesetztes VNC-Passwort</em>
+                                    </div>
+                                    
+                                    <p>Verbinden Sie sich mit einem VNC-Client wie VNC Viewer, RealVNC oder TightVNC.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">Web-basierter VNC-Zugriff</h5>
+                                <p class="card-text">Direkter Zugriff über den Browser (erfordert aktiven VNC-Server).</p>
+                                
+                                <div class="vnc-container" id="vncContainer">
+                                    <div id="vncPlaceholder">
+                                        <i class="bi bi-display fs-1 text-muted mb-3"></i>
+                                        <p>VNC-Server ist nicht aktiv oder noch nicht verbunden.</p>
+                                        <button id="connectVncBtn" class="btn btn-primary" disabled>
+                                            <i class="bi bi-box-arrow-in-right"></i> Mit VNC verbinden
+                                        </button>
+                                    </div>
+                                    <!-- Hier würde der VNC-Client eingebettet werden -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VNC Password Modal -->
+    <div class="modal fade" id="vncPasswordModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">VNC-Passwort setzen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="vncPassword" class="form-label">VNC-Passwort</label>
+                        <input type="password" class="form-control" id="vncPassword" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirmVncPassword" class="form-label">Passwort bestätigen</label>
+                        <input type="password" class="form-control" id="confirmVncPassword" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="button" id="saveVncPasswordBtn" class="btn btn-primary">Passwort speichern</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div class="modal fade" id="changePasswordModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Passwort ändern</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="/change-password" method="POST">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="currentPassword" class="form-label">Aktuelles Passwort</label>
+                            <input type="password" class="form-control" id="currentPassword" name="currentPassword" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="newPassword" class="form-label">Neues Passwort</label>
+                            <input type="password" class="form-control" id="newPassword" name="newPassword" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirmPassword" class="form-label">Passwort bestätigen</label>
+                            <input type="password" class="form-control" id="confirmPassword" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                        <button type="submit" class="btn btn-primary">Passwort ändern</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Passwort-Bestätigung überprüfen
+        document.querySelector('#changePasswordModal form').addEventListener('submit', function(e) {
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            if (newPassword !== confirmPassword) {
+                e.preventDefault();
+                alert('Die Passwörter stimmen nicht überein!');
+            }
+        });
+        
+        // VNC-Server starten
+        document.getElementById('startVncBtn').addEventListener('click', function() {
+            // Hier würde normalerweise ein AJAX-Request stehen, um den VNC-Server zu starten
+            this.disabled = true;
+            document.getElementById('vncStatus').className = 'alert alert-warning';
+            document.getElementById('vncStatus').textContent = 'VNC-Server wird gestartet...';
+            
+            // Simuliere Server-Start (würde normalerweise durch AJAX-Response erfolgen)
+            setTimeout(() => {
+                document.getElementById('vncStatus').className = 'alert alert-success';
+                document.getElementById('vncStatus').textContent = 'VNC-Server läuft auf Port 5901.';
+                document.getElementById('stopVncBtn').disabled = false;
+                document.getElementById('connectVncBtn').disabled = false;
+                document.getElementById('vncConnectionInfo').classList.remove('d-none');
+            }, 2000);
+        });
+        
+        // VNC-Server stoppen
+        document.getElementById('stopVncBtn').addEventListener('click', function() {
+            // Hier würde normalerweise ein AJAX-Request stehen, um den VNC-Server zu stoppen
+            this.disabled = true;
+            document.getElementById('vncStatus').className = 'alert alert-warning';
+            document.getElementById('vncStatus').textContent = 'VNC-Server wird gestoppt...';
+            
+            // Simuliere Server-Stop (würde normalerweise durch AJAX-Response erfolgen)
+            setTimeout(() => {
+                document.getElementById('vncStatus').className = 'alert alert-info';
+                document.getElementById('vncStatus').textContent = 'VNC-Server ist derzeit nicht aktiv. Klicken Sie auf "VNC-Server starten", um ihn zu starten.';
+                document.getElementById('startVncBtn').disabled = false;
+                document.getElementById('connectVncBtn').disabled = true;
+                document.getElementById('vncConnectionInfo').classList.add('d-none');
+            }, 2000);
+        });
+        
+        // VNC-Passwort setzen
+        document.getElementById('saveVncPasswordBtn').addEventListener('click', function() {
+            const vncPassword = document.getElementById('vncPassword').value;
+            const confirmVncPassword = document.getElementById('confirmVncPassword').value;
+            
+            if (!vncPassword) {
+                alert('Bitte geben Sie ein Passwort ein.');
+                return;
+            }
+            
+            if (vncPassword !== confirmVncPassword) {
+                alert('Die Passwörter stimmen nicht überein!');
+                return;
+            }
+            
+            // Hier würde normalerweise ein AJAX-Request stehen, um das VNC-Passwort zu setzen
+            alert('VNC-Passwort wurde erfolgreich gesetzt.');
+            
+            // Modal schließen
+            const modal = bootstrap.Modal.getInstance(document.getElementById('vncPasswordModal'));
+            modal.hide();
+        });
+        
+        // Mit VNC verbinden
+        document.getElementById('connectVncBtn').addEventListener('click', function() {
+            // Hier würde normalerweise ein Web-basierter VNC-Client geladen werden
+            document.getElementById('vncPlaceholder').innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Verbinde...</span></div><p class="mt-3">Verbindung wird hergestellt...</p>';
+            
+            // Simuliere Verbindungsaufbau (würde normalerweise durch tatsächlichen VNC-Client ersetzt)
+            setTimeout(() => {
+                document.getElementById('vncContainer').classList.add('active');
+                document.<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>
